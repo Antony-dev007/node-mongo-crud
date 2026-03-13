@@ -3,24 +3,30 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>User Dashboard</title>
+    <title>User Dashboard | Simplified</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <style>
-      .shimmer {
-        background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-        background-size: 200% 100%;
-        animation: shimmer 1.5s infinite;
+      /* Smooth Entrance Animation */
+      @keyframes fadeInUp {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
       }
-      @keyframes shimmer {
-        0% {
-          background-position: -200% 0;
-        }
-        100% {
-          background-position: 200% 0;
-        }
+      .animate-fade-in {
+        animation: fadeInUp 0.3s ease-out forwards;
+      }
+      /* Exit Animation Utility */
+      .row-exit {
+        opacity: 0 !important;
+        transform: scale(0.95) !important;
+        transition: all 0.3s ease-in;
       }
     </style>
   </head>
@@ -82,7 +88,6 @@
               </div>
               <button
                 type="submit"
-                id="add-btn"
                 class="w-full bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-blue-600 transition-colors shadow-lg shadow-blue-900/10 cursor-pointer"
               >
                 Sync to Database
@@ -112,10 +117,16 @@
                 </tr>
               </thead>
               <tbody id="table-body" class="divide-y divide-slate-50">
-                <tr class="shimmer-row">
-                  <td class="px-6 py-4"><div class="h-4 w-24 shimmer rounded"></div></td>
-                  <td class="px-6 py-4"><div class="h-4 w-32 shimmer rounded"></div></td>
-                  <td class="px-6 py-4"><div class="h-4 w-12 shimmer rounded ml-auto"></div></td>
+                <tr>
+                  <td class="px-6 py-4">
+                    <div class="h-4 w-24 bg-slate-200 animate-pulse rounded"></div>
+                  </td>
+                  <td class="px-6 py-4">
+                    <div class="h-4 w-32 bg-slate-200 animate-pulse rounded"></div>
+                  </td>
+                  <td class="px-6 py-4">
+                    <div class="h-4 w-12 bg-slate-200 animate-pulse rounded ml-auto"></div>
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -133,12 +144,13 @@
       const userCount = document.getElementById('counter');
       const socket = io('http://localhost:3000');
 
-      // Connection Status Handling
+      // Socket connection status
       socket.on('connect', () => {
         document.getElementById('status-dot').className = 'w-2.5 h-2.5 rounded-full bg-emerald-500';
         document.getElementById('socket-status').innerText = 'Connected';
       });
 
+      // Render function using CSS-based entrance animations
       const renderTable = (users) => {
         userCount.innerText = `${users.length} Users`;
 
@@ -151,44 +163,40 @@
         emptyState.classList.add('hidden');
         tableBody.innerHTML = users
           .map(
-            (user) => `
-                <tr class="user-row group hover:bg-slate-50 transition-all" data-id="${user._id}">
-                    <td class="px-6 py-4">
-                        <div class="font-bold text-slate-900">${user.name}</div>
-                        <div class="text-[10px] text-slate-400 uppercase tracking-tighter">ID: ${user._id.slice(-6)}</div>
-                    </td>
-                    <td class="px-6 py-4">
-                        <div class="text-slate-600">${user.email}</div>
-                        <div class="text-xs text-slate-400">${user.age} years old</div>
-                    </td>
-                    <td class="px-6 py-4 text-right">
-                        <button onclick="deleteUser('${user._id}')" class="opacity-0 group-hover:opacity-100 transition-opacity bg-red-50 text-red-500 px-3 py-1 rounded-lg text-xs font-bold hover:bg-red-500 hover:text-white cursor-pointer">
-                            Terminate
-                        </button>
-                    </td>
-                </tr>
-            `,
+            (user, index) => `
+            <tr class="user-row animate-fade-in group hover:bg-slate-50 transition-colors" 
+                data-id="${user._id}" 
+                style="animation-delay: ${index * 50}ms">
+                <td class="px-6 py-4">
+                    <div class="font-bold text-slate-900">${user.name}</div>
+                    <div class="text-[10px] text-slate-400 uppercase tracking-tighter">ID: ${user._id.slice(-6)}</div>
+                </td>
+                <td class="px-6 py-4">
+                    <div class="text-slate-600">${user.email}</div>
+                    <div class="text-xs text-slate-400">${user.age} years old</div>
+                </td>
+                <td class="px-6 py-4 text-right">
+                    <button onclick="deleteUser('${user._id}')" class="opacity-0 group-hover:opacity-100 transition-all bg-red-50 text-red-500 px-3 py-1 rounded-lg text-xs font-bold hover:bg-red-500 hover:text-white cursor-pointer">
+                        Terminate
+                    </button>
+                </td>
+            </tr>
+          `,
           )
           .join('');
-
-        anime({
-          targets: '.user-row',
-          translateX: [-10, 0],
-          opacity: [0, 1],
-          delay: anime.stagger(40),
-          easing: 'easeOutQuad',
-        });
       };
 
+      // CRUD: Fetch initial
       async function fetchInitialData() {
         try {
           const res = await axios.get('http://localhost:3000/users');
           renderTable(res.data.data);
         } catch (e) {
-          console.error(e);
+          console.error('Fetch Error:', e);
         }
       }
 
+      // CRUD: Create
       document.getElementById('user-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         const payload = {
@@ -200,24 +208,30 @@
           await axios.post('http://localhost:3000/users', payload);
           e.target.reset();
         } catch (e) {
-          alert(e.response.data.error);
+          alert(e.response?.data?.error || 'Error adding user');
         }
       });
 
+      // CRUD: Delete (with smooth CSS exit)
       async function deleteUser(id) {
         const row = document.querySelector(`tr[data-id="${id}"]`);
-        anime({
-          targets: row,
-          scale: 0.9,
-          opacity: 0,
-          duration: 300,
-          easing: 'easeInQuad',
-          complete: async () => {
+        if (!row) return;
+
+        // Apply exit animation
+        row.classList.add('row-exit');
+
+        // Wait for animation to finish before calling API
+        setTimeout(async () => {
+          try {
             await axios.delete(`http://localhost:3000/users/${id}`);
-          },
-        });
+          } catch (e) {
+            row.classList.remove('row-exit'); // Revert on failure
+            alert('Failed to delete user');
+          }
+        }, 300);
       }
 
+      // Live Updates
       socket.on('tableUpdated', (data) => renderTable(data));
       fetchInitialData();
     </script>

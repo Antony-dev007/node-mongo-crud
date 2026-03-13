@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>User Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
+    <style>
+      .shimmer {
+        background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+        background-size: 200% 100%;
+        animation: shimmer 1.5s infinite;
+      }
+      @keyframes shimmer {
+        0% {
+          background-position: -200% 0;
+        }
+        100% {
+          background-position: 200% 0;
+        }
+      }
+    </style>
+  </head>
+  <body class="bg-[#f8fafc] p-4 md:p-12 antialiased text-slate-900">
+    <main class="mx-auto max-w-5xl">
+      <header class="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <h1 class="text-3xl font-black tracking-tight text-slate-900">User Management</h1>
+          <p class="text-slate-500">Real-time User CRUD Environment</p>
+        </div>
+        <div
+          class="flex items-center gap-3 bg-white px-4 py-2 rounded-full border border-slate-200 shadow-sm"
+        >
+          <div id="status-dot" class="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></div>
+          <span
+            id="socket-status"
+            class="text-xs font-bold uppercase tracking-widest text-slate-600"
+            >Connecting...</span
+          >
+        </div>
+      </header>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <aside class="lg:col-span-1">
+          <div class="sticky top-8 p-6 bg-white rounded-2xl border border-slate-200 shadow-sm">
+            <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6">
+              Register New User
+            </h2>
+            <form id="user-form" class="space-y-4">
+              <div>
+                <label class="block text-xs font-bold mb-1 text-slate-700">Full Name</label>
+                <input
+                  type="text"
+                  id="name"
+                  class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                  placeholder="John Doe"
+                  required
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-bold mb-1 text-slate-700">Email Address</label>
+                <input
+                  type="email"
+                  id="email"
+                  class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                  placeholder="john@example.com"
+                  required
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-bold mb-1 text-slate-700">Age</label>
+                <input
+                  type="number"
+                  id="age"
+                  class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                  placeholder="25"
+                  required
+                />
+              </div>
+              <button
+                type="submit"
+                id="add-btn"
+                class="w-full bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-blue-600 transition-colors shadow-lg shadow-blue-900/10 cursor-pointer"
+              >
+                Sync to Database
+              </button>
+            </form>
+          </div>
+        </aside>
+
+        <section class="lg:col-span-2 space-y-4">
+          <div class="flex items-center justify-between px-2">
+            <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest">Live Records</h2>
+            <div
+              id="counter"
+              class="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded"
+            >
+              0 Users
+            </div>
+          </div>
+
+          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <table class="w-full text-left text-sm">
+              <thead class="bg-slate-50/50 border-b border-slate-100">
+                <tr>
+                  <th class="px-6 py-4 font-bold text-slate-500 italic">User</th>
+                  <th class="px-6 py-4 font-bold text-slate-500 italic">Contact</th>
+                  <th class="px-6 py-4 text-right font-bold text-slate-500 italic">Action</th>
+                </tr>
+              </thead>
+              <tbody id="table-body" class="divide-y divide-slate-50">
+                <tr class="shimmer-row">
+                  <td class="px-6 py-4"><div class="h-4 w-24 shimmer rounded"></div></td>
+                  <td class="px-6 py-4"><div class="h-4 w-32 shimmer rounded"></div></td>
+                  <td class="px-6 py-4"><div class="h-4 w-12 shimmer rounded ml-auto"></div></td>
+                </tr>
+              </tbody>
+            </table>
+            <div id="empty-state" class="hidden py-20 text-center">
+              <p class="text-slate-400 italic">No records found in database.</p>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <script>
+      const tableBody = document.getElementById('table-body');
+      const emptyState = document.getElementById('empty-state');
+      const userCount = document.getElementById('counter');
+      const socket = io('http://localhost:3000');
+
+      // Connection Status Handling
+      socket.on('connect', () => {
+        document.getElementById('status-dot').className = 'w-2.5 h-2.5 rounded-full bg-emerald-500';
+        document.getElementById('socket-status').innerText = 'Connected';
+      });
+
+      const renderTable = (users) => {
+        userCount.innerText = `${users.length} Users`;
+
+        if (users.length === 0) {
+          tableBody.innerHTML = '';
+          emptyState.classList.remove('hidden');
+          return;
+        }
+
+        emptyState.classList.add('hidden');
+        tableBody.innerHTML = users
+          .map(
+            (user) => `
+                <tr class="user-row group hover:bg-slate-50 transition-all" data-id="${user._id}">
+                    <td class="px-6 py-4">
+                        <div class="font-bold text-slate-900">${user.name}</div>
+                        <div class="text-[10px] text-slate-400 uppercase tracking-tighter">ID: ${user._id.slice(-6)}</div>
+                    </td>
+                    <td class="px-6 py-4">
+                        <div class="text-slate-600">${user.email}</div>
+                        <div class="text-xs text-slate-400">${user.age} years old</div>
+                    </td>
+                    <td class="px-6 py-4 text-right">
+                        <button onclick="deleteUser('${user._id}')" class="opacity-0 group-hover:opacity-100 transition-opacity bg-red-50 text-red-500 px-3 py-1 rounded-lg text-xs font-bold hover:bg-red-500 hover:text-white cursor-pointer">
+                            Terminate
+                        </button>
+                    </td>
+                </tr>
+            `,
+          )
+          .join('');
+
+        anime({
+          targets: '.user-row',
+          translateX: [-10, 0],
+          opacity: [0, 1],
+          delay: anime.stagger(40),
+          easing: 'easeOutQuad',
+        });
+      };
+
+      async function fetchInitialData() {
+        try {
+          const res = await axios.get('http://localhost:3000/users');
+          renderTable(res.data.data);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      document.getElementById('user-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const payload = {
+          name: document.getElementById('name').value,
+          email: document.getElementById('email').value,
+          age: document.getElementById('age').value,
+        };
+        try {
+          await axios.post('http://localhost:3000/users', payload);
+          e.target.reset();
+        } catch (e) {
+          alert(e.response.data.error);
+        }
+      });
+
+      async function deleteUser(id) {
+        const row = document.querySelector(`tr[data-id="${id}"]`);
+        anime({
+          targets: row,
+          scale: 0.9,
+          opacity: 0,
+          duration: 300,
+          easing: 'easeInQuad',
+          complete: async () => {
+            await axios.delete(`http://localhost:3000/users/${id}`);
+          },
+        });
+      }
+
+      socket.on('tableUpdated', (data) => renderTable(data));
+      fetchInitialData();
+    </script>
+  </body>
+</html>
